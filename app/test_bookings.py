@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.main import app, get_db
+from . import models
 
 Path("data").mkdir(parents=True, exist_ok=True)
 SQLALCHEMY_DATABASE_URL = "sqlite:///./data/test.db"
@@ -43,6 +44,15 @@ GUEST_A_UNIT_2: dict = {
 GUEST_B_UNIT_1: dict = {
     'unit_id': '1', 'guest_name': 'GuestB', 'check_in_date': datetime.date.today().strftime('%Y-%m-%d'),
     'number_of_nights': 5
+}
+
+GUEST_C_UNIT_1: dict = {
+    'unit_id': '1', 'guest_name': 'GuestB', 'check_in_date': (datetime.date.today() + datetime.timedelta(5)).strftime('%Y-%m-%d'),
+    'number_of_nights': 4
+}
+
+GUEST_A_UNIT_1_UPDATE: dict = {
+    'number_of_nights': 8
 }
 
 
@@ -141,3 +151,109 @@ def test_different_guest_same_unit_booking_different_date(test_db):
     )
     assert response.status_code == 400, response.text
     assert response.json()['detail'] == 'For the given check-in date, the unit is already occupied'
+    
+@pytest.mark.freeze_time('2023-05-21')
+def test_extend_stay_success(test_db):
+    response = client.post(
+        "/api/v1/booking",
+        json=GUEST_A_UNIT_1
+    )
+    assert response.status_code == 200
+    
+    db = TestingSessionLocal()
+    booking_id = db.query(models.Booking).first().id
+    db.close()
+
+    response = client.patch(
+        f"/api/v1/booking/{booking_id}",
+        json={'number_of_nights': 8}
+    )
+    assert response.status_code == 200
+    assert response.json()['number_of_nights'] == 8
+    
+@pytest.mark.freeze_time('2023-05-21')
+def test_extend_stay_booking_not_found(test_db):
+
+    response = client.patch(
+        f"/api/v1/booking/1",
+        json={'number_of_nights': 8}
+    )
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'Booking with id 1 not found'
+    
+@pytest.mark.freeze_time('2023-05-21')
+def test_extend_stay_reduce_not_allowed(test_db):
+    response = client.post(
+        "/api/v1/booking",
+        json=GUEST_A_UNIT_1
+    )
+    assert response.status_code == 200
+    
+    db = TestingSessionLocal()
+    booking_id = db.query(models.Booking).first().id
+    db.close()
+
+    response = client.patch(
+        f"/api/v1/booking/{booking_id}",
+        json={'number_of_nights': 3}
+    )
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'New number of nights must be greater than the current number'
+    
+@pytest.mark.freeze_time('2023-05-21')
+def test_extend_stay_unit_occupied(test_db):
+    response = client.post(
+        "/api/v1/booking",
+        json=GUEST_A_UNIT_1
+    )
+    assert response.status_code == 200
+    
+    
+    db = TestingSessionLocal()
+    booking_id = db.query(models.Booking).first().id
+    db.close()
+    
+    response = client.post(
+        "/api/v1/booking",
+        json=GUEST_C_UNIT_1
+    )
+    assert response.status_code == 200
+
+    response = client.patch(
+        f"/api/v1/booking/{booking_id}",
+        json={'number_of_nights': 8}
+    )
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'Can not extend, the unit is already occupied'
+  
+@pytest.mark.freeze_time('2023-05-21')
+def test_extend_stay_unit_not_occupied(test_db):
+    response = client.post(
+        "/api/v1/booking",
+        json=GUEST_A_UNIT_1
+    )
+    assert response.status_code == 200
+    
+    
+    db = TestingSessionLocal()
+    booking_id = db.query(models.Booking).first().id
+    db.close()
+    
+    response = client.post(
+        "/api/v1/booking",
+        json={
+            'unit_id': '1',  # same unit
+            'guest_name': 'GuestB',  # different guest
+            'check_in_date': (datetime.date.today() + datetime.timedelta(20)).strftime('%Y-%m-%d'),
+            'number_of_nights': 5
+        }
+    )
+    assert response.status_code == 200
+
+    response = client.patch(
+        f"/api/v1/booking/{booking_id}",
+        json={'number_of_nights': 8}
+    )
+    assert response.status_code == 200
+    assert response.json()['number_of_nights'] == 8
+  
