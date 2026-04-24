@@ -37,10 +37,15 @@ def update_booking(booking_id: int, db: Session, number_of_nights: int) -> model
     #Check Unit is available for the extanded period
     new_checkout_date = existing_booking.check_in_date + datetime.timedelta(number_of_nights)
     is_not_possible = db.execute(
-        select(models.Booking).where(models.Booking.unit_id == existing_booking.unit_id,
-                                     models.Booking.id!=existing_booking.id,
-                                     existing_booking.check_in_date < func.date(models.Booking.check_in_date, func.concat(models.Booking.number_of_nights, ' days')),
-                                     new_checkout_date > models.Booking.check_in_date)
+        select(models.Booking).where(
+            models.Booking.unit_id == existing_booking.unit_id,
+            models.Booking.id != existing_booking.id,
+            existing_booking.check_in_date < func.date(
+                models.Booking.check_in_date,
+                func.concat(models.Booking.number_of_nights, ' days')
+            ),
+            new_checkout_date > models.Booking.check_in_date
+        )
     ).scalars().first()
 
     if is_not_possible:
@@ -75,8 +80,11 @@ def is_booking_possible(db: Session, booking: schemas.BookingBase) -> Tuple[bool
     if db.execute(
         select(models.Booking).where(
             models.Booking.unit_id == booking.unit_id,
-            new_check_in_date<func.date(models.Booking.check_in_date, func.concat(models.Booking.number_of_nights, ' days')),
-            new_checkout_date>models.Booking.check_in_date
+            new_check_in_date < func.date(
+                models.Booking.check_in_date,
+                func.concat(models.Booking.number_of_nights, ' days')
+            ),
+            new_checkout_date > models.Booking.check_in_date
             
         )
     ).scalars().first():
